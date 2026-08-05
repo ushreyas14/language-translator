@@ -58,125 +58,48 @@ kaggle/
 
 ```mermaid
 flowchart TD
-    %% ─────────────────────────────────────
-    %% DATA PREPARATION
-    %% ─────────────────────────────────────
-    subgraph DATA["📦 Data Preparation"]
-        A1["Raw Competition Data\n~1,500 cuneiform documents\ntest.csv / train docs"]
-        A2["Data Augmentation\n~17,453 sentence pairs\ntrain_complete.csv"]
-        A1 -->|"augment + split"| A2
-    end
+    A([Raw Akkadian Transliterations\ntest.csv])
 
-    %% ─────────────────────────────────────
-    %% PREPROCESSING
-    %% ─────────────────────────────────────
-    subgraph PREP["🔧 Text Preprocessing  (OptimizedPreprocessor)"]
-        B1["Remove Scribal Notations\n! ? / standalone :"]
-        B2["Normalize Gaps and Breaks\nxxx ... → gap"]
-        B3["Strip Restoration Brackets\ntext in brackets → text"]
-        B4["Normalize Determinatives\nd → d, URU → URU"]
-        B5["Fix Sub/Superscripts\n₁₂₃ ¹²³ → 123"]
-        B6["Collapse Whitespace\nmulti-gap merge, trim"]
-        B1 --> B2 --> B3 --> B4 --> B5 --> B6
-    end
+    A --> B[Data Augmentation\nExpand ~1,500 docs to ~17,453 sentence pairs]
 
-    %% ─────────────────────────────────────
-    %% TOKENIZATION
-    %% ─────────────────────────────────────
-    subgraph TOK["🔤 Byte-Level Tokenization  (ByT5)"]
-        C1["Add Task Prefix\ntranslate Akkadian to English:"]
-        C2["UTF-8 Byte Encoding\nEvery char → 1–4 byte tokens\nNo OOV — all Unicode representable"]
-        C3["Pad / Truncate\nmax_input_len = 256\nLabels: pad → -100"]
-        C1 --> C2 --> C3
-    end
+    B --> C[Text Preprocessor\nRemove scribal notations · normalize gaps · fix subscripts]
 
-    %% ─────────────────────────────────────
-    %% MODEL SETUP
-    %% ─────────────────────────────────────
-    subgraph MODEL["🧠 Model Setup"]
-        D1["ByT5-base\ngoogle/byt5-base\n~580M parameters\nEncoder-Decoder T5"]
-        D2["LoRA Adapters  r=32\nalpha=64, dropout=0.05\ntarget: all-linear\n~1–3% trainable params"]
-        D1 -->|"PEFT wraps"| D2
-    end
+    C --> D[Byte-Level Tokenizer\nByT5 · UTF-8 bytes · add task prefix]
 
-    %% ─────────────────────────────────────
-    %% TRAINING
-    %% ─────────────────────────────────────
-    subgraph TRAIN["🏋️ Training  (V4 Pipeline)"]
-        E1["Seq2SeqTrainer\nAdafactor optimizer\nbatch_size=4, grad_accum=4\nwarmup_steps=100"]
-        E2["Competition Metric\nBLEU + chrF++ computed\nscore = sqrt(BLEU x chrF++)"]
-        E3["Best Checkpoint Saved\nbyt5-akkadian-optimized-34x\nModel A in ensemble"]
-        E1 -->|"eval every epoch"| E2 --> E3
-    end
+    D --> E{Fits within\n256 tokens?}
 
-    %% ─────────────────────────────────────
-    %% INFERENCE — CANDIDATE GENERATION
-    %% ─────────────────────────────────────
-    subgraph INFER["⚡ Inference — Candidate Generation"]
-        F1["Model A\nbyt5-akkadian-optimized-34x"]
-        F2["Model B\nbyt5-akkadian-mbr-v2"]
-        F3["Beam Search x2\nnum_beams=4\nlength_penalty=1.3"]
-        F4["Nucleus Sampling x1\ntop_p=0.92, temp=0.75"]
-        F5["Candidate Pool\n2 models × 3 = 6 candidates"]
-        F1 --> F3
-        F2 --> F3
-        F1 --> F4
-        F2 --> F4
-        F3 --> F5
-        F4 --> F5
-    end
+    E -->|Yes| F[Full Text\nPass directly to model]
+    E -->|No| G[Truncate\nCut to max_input_len = 256]
 
-    %% ─────────────────────────────────────
-    %% MBR DECODING
-    %% ─────────────────────────────────────
-    subgraph MBR["🎯 MBR Decoding  (Minimum Bayes Risk)"]
-        G1["Pairwise Utility Scoring\ncompetition metric used\neach candidate vs all others"]
-        G2["Agreement Bonus\n+0.05 if candidates match\nacross models — consensus"]
-        G3["Select Best Translation\nhighest expected utility\nfrom the candidate pool"]
-        G1 --> G2 --> G3
-    end
+    F --> H[ByT5-base + LoRA\ngoogle/byt5-base · r=32 · α=64 · all-linear]
+    G --> H
 
-    %% ─────────────────────────────────────
-    %% POSTPROCESSING
-    %% ─────────────────────────────────────
-    subgraph POST["✨ Postprocessing  (VectorizedPostprocessor)"]
-        H1["De-duplicate Repeated Phrases\nremove hallucinated repetitions"]
-        H2["Remove Model Artifacts\nstrip incomplete tokens"]
-        H3["Fix Punctuation\nnormalize spacing around punctuation"]
-        H1 --> H2 --> H3
-    end
+    H --> I[Seq2SeqTrainer\nAdafactor · batch=4 · grad_accum=4 · 10 epochs]
 
-    %% ─────────────────────────────────────
-    %% OUTPUT
-    %% ─────────────────────────────────────
-    OUT["📄 submission.csv\nEnglish translations\nScore: 35"]
+    I --> J[Competition Metric\nscore = sqrt(BLEU x chrF++)]
 
-    %% ─────────────────────────────────────
-    %% CONNECTIONS BETWEEN SUBGRAPHS
-    %% ─────────────────────────────────────
-    DATA --> PREP
-    PREP --> TOK
-    TOK --> MODEL
-    MODEL --> TRAIN
-    TRAIN -->|"trained weights"| INFER
-    A2 -->|"test.csv through preprocessing"| PREP
-    INFER --> MBR
-    MBR --> POST
-    POST --> OUT
+    J --> K{Best checkpoint\nimproved?}
 
-    %% ─────────────────────────────────────
-    %% STYLING
-    %% ─────────────────────────────────────
-    style DATA fill:#1a1a2e,stroke:#e94560,color:#fff
-    style PREP fill:#16213e,stroke:#0f3460,color:#fff
-    style TOK fill:#0f3460,stroke:#533483,color:#fff
-    style MODEL fill:#533483,stroke:#e94560,color:#fff
-    style TRAIN fill:#1a1a2e,stroke:#e94560,color:#fff
-    style INFER fill:#16213e,stroke:#0f3460,color:#fff
-    style MBR fill:#0f3460,stroke:#533483,color:#fff
-    style POST fill:#533483,stroke:#e94560,color:#fff
-    style OUT fill:#e94560,stroke:#fff,color:#fff
+    K -->|Yes| L[Save Checkpoint\nbyt5-akkadian-optimized-34x]
+    K -->|No| I
+
+    L --> M[Model A\nbyt5-akkadian-optimized-34x]
+
+    M --> N[Candidate Generator\nBeam search ×2 + Nucleus sampling ×1 per model]
+
+    N --> O[Model B\nbyt5-akkadian-mbr-v2]
+
+    O --> P[Candidate Pool\n2 models × 3 candidates = 6 translations]
+
+    P --> Q[MBR Decoder\nPairwise sqrt(BLEU x chrF++) · agreement bonus +0.05]
+
+    Q --> R[Best Translation\nHighest expected utility selected]
+
+    R --> S[Postprocessor\nDe-duplicate · remove artifacts · fix punctuation]
+
+    S --> T([submission.csv\nScore: 35])
 ```
+
 
 ---
 
