@@ -58,47 +58,48 @@ kaggle/
 
 ```mermaid
 flowchart TD
-    A([Raw Akkadian Transliterations\ntest.csv])
+    A(["Raw Akkadian Transliterations\ntest.csv"])
 
-    A --> B[Data Augmentation\nExpand ~1,500 docs to ~17,453 sentence pairs]
+    A --> B["Data Augmentation\nExpand ~1,500 docs to ~17,453 sentence pairs"]
 
-    B --> C[Text Preprocessor\nRemove scribal notations · normalize gaps · fix subscripts]
+    B --> C["Text Preprocessor\nRemove scribal notations, normalize gaps, fix subscripts"]
 
-    C --> D[Byte-Level Tokenizer\nByT5 · UTF-8 bytes · add task prefix]
+    C --> D["Byte-Level Tokenizer\nByT5, UTF-8 bytes, add task prefix"]
 
-    D --> E{Fits within\n256 tokens?}
+    D --> E{"Fits within\n256 tokens?"}
 
-    E -->|Yes| F[Full Text\nPass directly to model]
-    E -->|No| G[Truncate\nCut to max_input_len = 256]
+    E -->|Yes| F["Full Text\nPass directly to model"]
+    E -->|No| G["Truncate\nCut to max_input_len = 256"]
 
-    F --> H[ByT5-base + LoRA\ngoogle/byt5-base · r=32 · α=64 · all-linear]
+    F --> H["ByT5-base + LoRA\ngoogle/byt5-base, r=32, alpha=64, all-linear"]
     G --> H
 
-    H --> I[Seq2SeqTrainer\nAdafactor · batch=4 · grad_accum=4 · 10 epochs]
+    H --> I["Seq2SeqTrainer\nAdafactor, batch=4, grad_accum=4, 10 epochs"]
 
-    I --> J[Competition Metric\nscore = sqrt(BLEU x chrF++)]
+    I --> J["Competition Metric\nscore = sqrt BLEU x chrF"]
 
-    J --> K{Best checkpoint\nimproved?}
+    J --> K{"Best checkpoint\nimproved?"}
 
-    K -->|Yes| L[Save Checkpoint\nbyt5-akkadian-optimized-34x]
+    K -->|Yes| L["Save Checkpoint\nbyt5-akkadian-optimized-34x"]
     K -->|No| I
 
-    L --> M[Model A\nbyt5-akkadian-optimized-34x]
+    L --> M["Model A\nbyt5-akkadian-optimized-34x"]
 
-    M --> N[Candidate Generator\nBeam search ×2 + Nucleus sampling ×1 per model]
+    M --> N["Candidate Generator\nBeam search x2 + Nucleus sampling x1 per model"]
 
-    N --> O[Model B\nbyt5-akkadian-mbr-v2]
+    N --> O["Model B\nbyt5-akkadian-mbr-v2"]
 
-    O --> P[Candidate Pool\n2 models × 3 candidates = 6 translations]
+    O --> P["Candidate Pool\n2 models x 3 candidates = 6 translations"]
 
-    P --> Q[MBR Decoder\nPairwise sqrt(BLEU x chrF++) · agreement bonus +0.05]
+    P --> Q["MBR Decoder\nPairwise utility scoring, agreement bonus +0.05"]
 
-    Q --> R[Best Translation\nHighest expected utility selected]
+    Q --> R["Best Translation\nHighest expected utility selected"]
 
-    R --> S[Postprocessor\nDe-duplicate · remove artifacts · fix punctuation]
+    R --> S["Postprocessor\nDe-duplicate, remove artifacts, fix punctuation"]
 
-    S --> T([submission.csv\nScore: 35])
+    S --> T(["submission.csv\nScore: 35"])
 ```
+
 
 
 ---
